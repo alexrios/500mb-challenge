@@ -1,0 +1,9 @@
+{
+  "collaborators": [
+    {
+      "name": "Alex Rios",
+      "social_links": ["https://github.com/alexrios"]
+    }
+  ],
+  "stack": ["zig", "redis", "nginx"]
+}

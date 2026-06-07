@@ -1,0 +1,7 @@
+.zig-cache/
+zig-out/
+.git/
+*.md
+docker-compose*.yml
+nginx.conf
+me.json

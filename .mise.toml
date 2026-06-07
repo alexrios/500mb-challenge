@@ -1,0 +1,53 @@
+# Toolchain + custom tasks for the 500MB Club Zig submission.
+# Pin the exact Zig the challenge was built and tested against.
+
+[tools]
+zig = "0.16.0"
+
+[env]
+# Build target for the production (Raspberry Pi 5) image. Fully static musl.
+PI_TARGET = "aarch64-linux-musl"
+
+[tasks.build]
+description = "Build native ReleaseFast binary"
+run = "zig build -Doptimize=ReleaseFast"
+
+[tasks.build-pi]
+description = "Cross-compile a static aarch64-musl binary for the Raspberry Pi 5"
+run = "zig build -Dtarget=aarch64-linux-musl -Doptimize=ReleaseFast"
+
+[tasks.run]
+description = "Build and run the server locally (needs REDIS_ADDR / PORT env)"
+run = "zig build run -Doptimize=ReleaseFast"
+
+[tasks.test]
+description = "Run unit tests"
+run = "zig build test"
+
+[tasks.fmt]
+description = "Format all Zig sources"
+run = "zig fmt build.zig src"
+
+[tasks.fmt-check]
+description = "Check formatting without writing"
+run = "zig fmt --check build.zig src"
+
+[tasks.image]
+description = "Build the multi-arch-ready Docker image (local arch)"
+run = "docker build -t zig-telemetry:local ."
+
+[tasks.up]
+description = "Bring the full stack up (3 APIs + nginx + redis)"
+run = "docker compose up --build -d"
+
+[tasks.down]
+description = "Tear the stack down"
+run = "docker compose down -v"
+
+[tasks.smoke]
+description = "Run the k6 smoke test against the local stack"
+run = "k6 run --env BASE_URL=http://localhost:8080 ../test/smoke.js"
+
+[tasks.bench]
+description = "Run the k6 steady test against the local stack"
+run = "k6 run --env BASE_URL=http://localhost:8080 ../test/test.js"

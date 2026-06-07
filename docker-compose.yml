@@ -1,0 +1,90 @@
+# The 500MB Club — Zig submission stack.
+#
+# 3 API replicas + nginx (round-robin :8080) + redis, all inside the aggregate
+# budget of 2 CPUs / 500 MiB. Redis gets a static IP so the dependency-free
+# (no-libc) binary can reach it without DNS resolution.
+#
+# Security hardening (read_only, cap_drop, no-new-privileges, tmpfs) is applied
+# automatically by the challenge gate when omitted; this file stays runnable
+# as-is for local testing.
+
+services:
+  api-1: &api
+    image: ${IMAGE:-zig-telemetry:local}
+    build: .
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 48m
+    cpus: 0.24
+    environment:
+      PORT: "8000"
+      REDIS_HOST: "172.31.7.2"
+      REDIS_PORT: "6379"
+      STREAM_MAXLEN: "2048"
+      INSTANCE_ID: "api-1"
+    networks: [backend]
+    depends_on: [redis]
+    restart: unless-stopped
+
+  api-2:
+    <<: *api
+    environment:
+      PORT: "8000"
+      REDIS_HOST: "172.31.7.2"
+      REDIS_PORT: "6379"
+      STREAM_MAXLEN: "2048"
+      INSTANCE_ID: "api-2"
+
+  api-3:
+    <<: *api
+    environment:
+      PORT: "8000"
+      REDIS_HOST: "172.31.7.2"
+      REDIS_PORT: "6379"
+      STREAM_MAXLEN: "2048"
+      INSTANCE_ID: "api-3"
+
+  lb:
+    image: nginx:1.27-alpine
+    ports: ["${LB_HOST_PORT:-8080}:80"]
+    mem_limit: 48m
+    cpus: 0.65
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [frontend, backend]
+    depends_on: [api-1, api-2, api-3]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # Redis config is already optimal for this workload: no persistence (no RDB
+    # fork pauses / no AOF fsync stalls -> flat tail latency + stability), no
+    # eviction (eviction would silently drop data and corrupt query results),
+    # single command thread (we drive it with one pipelined connection per
+    # replica, so io-threads add nothing). The real write-path lever is
+    # app-side (fewer commands), not Redis tuning.
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 96mb
+      --maxmemory-policy noeviction
+      --io-threads 1
+    mem_limit: 110m
+    cpus: 0.62
+    networks:
+      backend:
+        ipv4_address: 172.31.7.2
+    restart: unless-stopped
+
+# Only the load balancer is exposed (frontend). APIs and storage live on an
+# internal-only network with no external connectivity.
+networks:
+  frontend: {}
+  backend:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.7.0/24
