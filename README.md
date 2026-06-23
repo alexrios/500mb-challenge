@@ -31,8 +31,21 @@ k6 ──► nginx :8080 (strict round-robin) ──► 3× Zig API :8000 ──
 - RESP pipelining: unlimited concurrent client requests over one Redis socket.
 - Lazy, reused connection buffers — RSS tracks live concurrency, not capacity.
 
-Measured locally (2-CPU / Docker budget): **aggregate RSS ≈ 32 MB** at the
-base load, p99 ≈ 1.7–2.9 ms across all operations, zero errors at ~4.8k RPS.
+### CPU budget split
+
+The LB is the funnel — it handles **100 %** of requests, while each API replica
+only sees a third — so it is the capacity bottleneck. A single nginx worker can
+use at most one core, so the 2-CPU budget is split **nginx 1.0 / redis 0.45 /
+api 0.18 × 3** (= 1.99): the LB gets a full core, redis and the three (very
+cheap) APIs share the other. Rebalancing here roughly doubled the sustained-RPS
+knee versus an even split, with no code change. The per-device ZSET is trimmed
+to **512** entries — the smallest cap that still fully serves the anomaly window
+(256) and the max range `limit` (500) — keeping redis RSS and CPU flat.
+
+Measured locally (2-CPU / Docker budget): at the steady base load **aggregate
+RSS ≈ 35 MB** (≤ 50 MB band → top efficiency clip), aggregate CPU ≈ 11 %,
+p99 ≈ 1.7–2.9 ms across all operations; under a capacity ramp the stack
+sustains **~10k RPS with zero errors** (p99 ≈ 50 ms) before the knee.
 
 ## Layout
 

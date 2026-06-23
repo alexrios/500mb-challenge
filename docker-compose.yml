@@ -17,12 +17,19 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 48m
-    cpus: 0.24
+    # The LB is the funnel (handles 100% of traffic) and is the capacity
+    # bottleneck; a single nginx worker can use at most one core, so we give it
+    # a full core and split the other across redis + the 3 (very cheap) APIs.
+    # Sum = 1.0 (lb) + 0.45 (redis) + 0.18×3 (api) = 1.99 ≤ 2.0.
+    cpus: 0.18
     environment:
       PORT: "8000"
       REDIS_HOST: "172.31.7.2"
       REDIS_PORT: "6379"
-      STREAM_MAXLEN: "2048"
+      # Bounded ZSET per device. 512 ≥ the anomaly window (256) and the max
+      # range limit (500), so no contract-valid query is ever under-served,
+      # while keeping redis RSS/CPU tiny (flat memory, cache-friendly skiplists).
+      STREAM_MAXLEN: "512"
       INSTANCE_ID: "api-1"
     networks: [backend]
     depends_on: [redis]
@@ -34,7 +41,7 @@ services:
       PORT: "8000"
       REDIS_HOST: "172.31.7.2"
       REDIS_PORT: "6379"
-      STREAM_MAXLEN: "2048"
+      STREAM_MAXLEN: "512"
       INSTANCE_ID: "api-2"
 
   api-3:
@@ -43,14 +50,14 @@ services:
       PORT: "8000"
       REDIS_HOST: "172.31.7.2"
       REDIS_PORT: "6379"
-      STREAM_MAXLEN: "2048"
+      STREAM_MAXLEN: "512"
       INSTANCE_ID: "api-3"
 
   lb:
     image: nginx:1.27-alpine
     ports: ["${LB_HOST_PORT:-8080}:80"]
     mem_limit: 48m
-    cpus: 0.65
+    cpus: 1.0
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     networks: [frontend, backend]
@@ -73,7 +80,7 @@ services:
       --maxmemory-policy noeviction
       --io-threads 1
     mem_limit: 110m
-    cpus: 0.62
+    cpus: 0.45
     networks:
       backend:
         ipv4_address: 172.31.7.2
