@@ -10,7 +10,10 @@
 
 services:
   api-1: &api
-    image: ${IMAGE:-zig-telemetry:local}
+    # Published, public, native-arm64 image for the Pi benchmark. `build: .`
+    # stays as a local-dev fallback / reproducibility path; the gate audits the
+    # pulled image, never the build (multi-stage: final layer is FROM scratch).
+    image: ${IMAGE:-ghcr.io/alexrios/500mb-zig:latest}
     build: .
     user: "10001:10001"
     read_only: true
