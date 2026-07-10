@@ -13,7 +13,12 @@ services:
     # Published, public, native-arm64 image for the Pi benchmark. `build: .`
     # stays as a local-dev fallback / reproducibility path; the gate audits the
     # pulled image, never the build (multi-stage: final layer is FROM scratch).
-    image: ${IMAGE:-ghcr.io/alexrios/500mb-zig:latest}
+    #
+    # Literal reference, not ${IMAGE:-...}: the challenge gate extracts this
+    # value with a plain regex over the YAML text (no variable interpolation),
+    # so a shell-style default here gets passed to `docker pull` verbatim and
+    # fails. Override locally with `IMAGE=... docker compose build` instead.
+    image: ghcr.io/alexrios/500mb-zig:latest
     build: .
     user: "10001:10001"
     read_only: true
