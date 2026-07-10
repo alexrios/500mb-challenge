@@ -44,5 +44,8 @@ RUN set -eux; \
 FROM scratch
 COPY --from=build /src/zig-out/bin/telemetry /telemetry
 EXPOSE 8000
-# Runs as the user set in docker-compose (non-root). No shell available.
+# Numeric UID:GID works on scratch with no /etc/passwd. Matches docker-compose's
+# `user:`, but must also be baked in here: the gate audits the image's own
+# Config.User, not the compose-level override.
+USER 10001:10001
 ENTRYPOINT ["/telemetry"]
